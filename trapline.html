@@ -273,6 +273,48 @@
     { id:'other',  label:'Other wildlife',  icon:'🐾' }
   ];
 
+  // Sample listings shown the first time the directory is empty, so the app has
+  // something to demo. Once real catchers register, this never runs again.
+  function demoCatchers(){
+    return [
+      {
+        id:'demo-1', name:'Sunil Perera', phone:'0771234567', whatsapp:'94771234567',
+        area:'Maharagama, Western Province', lat:6.8500, lng:79.9257,
+        animalTypes:['snake','rat'], priceNote:'Rs. 1,500–3,000 depending on species',
+        description:'12 years catching snakes safely, including cobra and viper handling. Also do rat and rodent removal.',
+        availability:'now', createdAt: Date.now() - 1000*60*60*24*30
+      },
+      {
+        id:'demo-2', name:'Kamala Rodrigo', phone:'0711122334', whatsapp:'',
+        area:'Nugegoda', lat:6.8649, lng:79.8997,
+        animalTypes:['bees'], priceNote:'Rs. 2,000 flat rate, more for high or hard-to-reach nests',
+        description:'Bee and wasp nest removal, relocates hives where possible instead of destroying them.',
+        availability:'appointment', createdAt: Date.now() - 1000*60*60*24*20
+      },
+      {
+        id:'demo-3', name:'Ranjith Fernando', phone:'0765554321', whatsapp:'94765554321',
+        area:'Kottawa', lat:6.8407, lng:79.9705,
+        animalTypes:['rat','bats','other'], priceNote:'Rs. 1,000–2,500',
+        description:'Roof and ceiling pest removal — rats, bats, and general nuisance wildlife.',
+        availability:'now', createdAt: Date.now() - 1000*60*60*24*10
+      },
+      {
+        id:'demo-4', name:'Priyantha Silva', phone:'0723334455', whatsapp:'94723334455',
+        area:'Homagama', lat:6.8442, lng:80.0021,
+        animalTypes:['snake','monkey'], priceNote:'Rs. 2,500–5,000, monkey trapping quoted per job',
+        description:'Snake catching and monkey trapping for gardens and rooftops. Appointment only, brings his own equipment.',
+        availability:'appointment', createdAt: Date.now() - 1000*60*60*24*5
+      },
+      {
+        id:'demo-5', name:'Chamari Jayasuriya', phone:'0709988776', whatsapp:'',
+        area:'Piliyandala', lat:6.8016, lng:79.9224,
+        animalTypes:['bees','other'], priceNote:'Rs. 1,800 average, free quote by phone',
+        description:'Family-run pest removal, mainly bees and wasps, same-day callouts most weekdays.',
+        availability:'now', createdAt: Date.now() - 1000*60*60*24*2
+      }
+    ];
+  }
+
   var state = {
     view: 'home',
     catchers: [],
@@ -375,7 +417,12 @@
   async function loadCatchers(){
     state.loadingCatchers = true;
     render();
-    state.catchers = await getDirectory();
+    var dir = await getDirectory();
+    if (dir.length === 0){
+      dir = demoCatchers();
+      await saveDirectory(dir);
+    }
+    state.catchers = dir;
     state.loadingCatchers = false;
     state.catchersLoaded = true;
     render();
@@ -741,9 +788,6 @@
           '<div class="tk-body">Your listing is now visible to anyone browsing ' + esc(area) + '. Save your phone number — you\'ll need it under <strong>My listing</strong> to edit or take it down.</div>' +
           '<div class="tk-actions"><button class="btn btn-ochre btn-sm" data-nav="browse">See it in Find a catcher</button></div>' +
         '</div>';
-      document.querySelectorAll('#registerTicketSlot [data-nav]').forEach(function(b){
-        b.addEventListener('click', function(){ navigate('browse'); });
-      });
       e.target.reset();
     });
   }
@@ -982,8 +1026,14 @@
     }
   }
 
-  document.querySelectorAll('[data-nav]').forEach(function(el){
-    el.addEventListener('click', function(){ navigate(el.getAttribute('data-nav')); });
+  // Event delegation for navigation: buttons with [data-nav] are re-created every
+  // time a view renders, so a one-time querySelectorAll at startup misses any
+  // button that isn't in the static header (this is what broke the hero CTAs).
+  // A single listener on document catches clicks on any [data-nav] element,
+  // present now or added later.
+  document.addEventListener('click', function(e){
+    var navEl = e.target.closest('[data-nav]');
+    if (navEl){ navigate(navEl.getAttribute('data-nav')); }
   });
 
   render();
