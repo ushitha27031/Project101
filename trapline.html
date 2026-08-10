@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trapline — local catchers, dispatched fast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1F2A1E;
+    --moss:#3F5C3A;
+    --moss-deep:#26361F;
+    --parchment:#EDE6D6;
+    --parchment-dim:#DED2B6;
+    --card:#F7F3E8;
+    --ochre:#D9A62E;
+    --ochre-deep:#B3841E;
+    --rust:#B4472A;
+    --rust-deep:#8F371F;
+    --ivory:#F7F3E8;
+    --line: rgba(31,42,30,0.18);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--parchment);
+    color:var(--ink);
+    font-family:'Work Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  h1,h2,h3,.display{ font-family:'Bitter', serif; font-weight:800; letter-spacing:-0.01em; margin:0; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  button{ font-family:inherit; cursor:pointer; }
+  a{ color:inherit; }
+  :focus-visible{ outline:2px solid var(--rust); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+
+  /* ---------- layout shell ---------- */
+  #app{ min-height:100vh; display:flex; flex-direction:column; }
+  .topbar{
+    background:var(--moss-deep);
+    color:var(--ivory);
+    padding:14px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap;
+    border-bottom:3px solid var(--ochre);
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; cursor:pointer; background:none; border:none; color:inherit; padding:0; }
+  .brand .display{ font-size:22px; color:var(--ivory); }
+  .brand .tagline{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ochre); }
+  .navlinks{ display:flex; gap:8px; flex-wrap:wrap; }
+  .navlinks button{
+    background:transparent; border:1px solid rgba(247,243,232,0.35); color:var(--ivory);
+    padding:8px 14px; border-radius:3px; font-size:13px; font-weight:600;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .navlinks button:hover{ background:rgba(247,243,232,0.12); border-color:var(--ochre); }
+  .navlinks button.active{ background:var(--ochre); color:var(--ink); border-color:var(--ochre); }
+
+  main{ flex:1; }
+  .wrap{ max-width:980px; margin:0 auto; padding:28px 20px 60px; }
+
+  footer.sitefoot{
+    background:var(--ink); color:rgba(247,243,232,0.75); padding:18px 20px; font-size:12.5px;
+    text-align:center; line-height:1.6;
+  }
+  footer.sitefoot strong{ color:var(--ivory); }
+
+  /* ---------- hero ---------- */
+  .hero{
+    background:linear-gradient(180deg, var(--moss-deep), var(--ink));
+    color:var(--ivory);
+    padding:56px 20px 48px;
+  }
+  .hero-inner{ max-width:980px; margin:0 auto; }
+  .eyebrow{ font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:.12em; font-size:12px; color:var(--ochre); margin-bottom:10px; }
+  .hero h1{ font-size:clamp(28px,4.5vw,46px); line-height:1.08; max-width:16ch; }
+  .hero p.lede{ margin-top:14px; font-size:16px; max-width:52ch; color:rgba(247,243,232,0.85); line-height:1.6; }
+  .hero-ctas{ display:flex; gap:14px; margin-top:28px; flex-wrap:wrap; }
+  .ticket-btn{
+    display:flex; flex-direction:column; gap:2px;
+    border:1.5px dashed rgba(247,243,232,0.5);
+    background:rgba(247,243,232,0.06);
+    padding:14px 20px; border-radius:4px; min-width:220px;
+    text-align:left; color:var(--ivory);
+    transition:transform .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .ticket-btn:hover{ transform:translateY(-2px); background:rgba(247,243,232,0.12); border-color:var(--ochre); }
+  .ticket-btn .tb-label{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ochre); }
+  .ticket-btn .tb-title{ font-family:'Bitter',serif; font-weight:800; font-size:19px; }
+  .ticket-btn.primary{ background:var(--rust); border:1.5px solid var(--rust); }
+  .ticket-btn.primary:hover{ background:var(--rust-deep); border-color:var(--rust-deep); }
+  .ticket-btn.primary .tb-label{ color:rgba(247,243,232,0.85); }
+
+  .howsteps{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:44px; }
+  .howstep{ border-top:2px solid var(--ochre); padding-top:10px; }
+  .howstep .num{ font-family:'IBM Plex Mono',monospace; color:var(--ochre); font-size:13px; }
+  .howstep h3{ font-size:16px; margin-top:4px; color:var(--ivory); }
+  .howstep p{ font-size:13.5px; color:rgba(247,243,232,0.75); line-height:1.5; margin-top:4px; }
+  @media (max-width:720px){ .howsteps{ grid-template-columns:1fr; } }
+
+  /* ---------- controls / filters ---------- */
+  .panel{
+    background:var(--card); border:1px solid var(--line); border-radius:6px; padding:18px;
+  }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:12.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--moss-deep); }
+  .field .hint{ font-size:12px; color:rgba(31,42,30,0.6); }
+  input[type=text], input[type=tel], input[type=search], input[type=datetime-local], textarea, select{
+    font-family:'Work Sans',sans-serif; font-size:14.5px; padding:10px 12px;
+    border:1px solid var(--parchment-dim); background:#fff; border-radius:4px; color:var(--ink); width:100%;
+  }
+  textarea{ resize:vertical; min-height:70px; }
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    border:1.5px solid var(--ink); background:transparent; color:var(--ink);
+    padding:10px 16px; border-radius:4px; font-weight:700; font-size:13.5px;
+    transition:background .15s ease, color .15s ease, transform .1s ease;
+  }
+  .btn:hover{ transform:translateY(-1px); }
+  .btn-primary{ background:var(--rust); border-color:var(--rust); color:var(--ivory); }
+  .btn-primary:hover{ background:var(--rust-deep); border-color:var(--rust-deep); }
+  .btn-ochre{ background:var(--ochre); border-color:var(--ochre); color:var(--ink); }
+  .btn-ochre:hover{ background:var(--ochre-deep); border-color:var(--ochre-deep); }
+  .btn-ghost{ border-color:var(--parchment-dim); color:var(--ink); }
+  .btn-block{ width:100%; }
+  .btn-sm{ padding:7px 12px; font-size:12.5px; }
+  .btn[disabled]{ opacity:.5; cursor:not-allowed; transform:none; }
+
+  .filterbar{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:18px; }
+  .filterbar .field{ flex:1 1 200px; }
+  .chiprow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .chip{
+    border:1.5px solid var(--parchment-dim); background:#fff; color:var(--ink);
+    padding:7px 13px; border-radius:100px; font-size:13px; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px; transition:all .15s ease;
+  }
+  .chip.active{ background:var(--moss); border-color:var(--moss); color:var(--ivory); }
+  .chip:hover{ border-color:var(--moss); }
+
+  /* ---------- catcher cards ---------- */
+  .results-meta{ font-size:13px; color:rgba(31,42,30,0.65); margin:18px 0 12px; }
+  .cardgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+  .ccard{
+    background:var(--card); border:1px solid var(--line); border-radius:6px; padding:16px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .ccard-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .ccard-head h3{ font-size:18px; }
+  .badge{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+    padding:4px 9px; border-radius:100px; white-space:nowrap;
+  }
+  .badge.now{ background:var(--ochre); color:var(--ink); }
+  .badge.appt{ background:transparent; border:1px solid var(--parchment-dim); color:rgba(31,42,30,0.7); }
+  .species-tags{ display:flex; gap:6px; flex-wrap:wrap; }
+  .tag{ font-size:12px; background:var(--parchment); border:1px solid var(--parchment-dim); border-radius:100px; padding:3px 9px; }
+  .locrow{ display:flex; justify-content:space-between; align-items:center; font-size:13px; gap:8px; flex-wrap:wrap; }
+  .locrow .area{ color:var(--moss-deep); font-weight:600; }
+  .distpill{ font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--moss-deep); color:var(--ivory); padding:3px 9px; border-radius:100px; }
+  .price{ font-family:'IBM Plex Mono',monospace; font-size:13.5px; color:var(--rust-deep); font-weight:600; }
+  .desc{ font-size:13.5px; line-height:1.5; color:rgba(31,42,30,0.8); }
+  .ccard-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; padding-top:6px; }
+
+  .empty{ text-align:center; padding:50px 20px; color:rgba(31,42,30,0.65); }
+  .empty h3{ font-size:18px; margin-bottom:8px; }
+
+  /* ---------- ticket (signature element) ---------- */
+  .ticket{
+    position:relative; background:var(--card); border:1.5px solid var(--ink); border-radius:4px;
+    padding:20px 20px 26px; margin-top:16px; overflow:visible;
+  }
+  .ticket::after{
+    content:''; position:absolute; left:0; right:0; bottom:-9px; height:16px;
+    background: radial-gradient(circle at 8px 0, transparent 8px, var(--parchment) 9px);
+    background-size:16px 16px;
+  }
+  .ticket .stamp{
+    position:absolute; top:14px; right:16px; transform:rotate(6deg);
+    border:2px solid var(--rust); color:var(--rust); font-family:'IBM Plex Mono',monospace;
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+    padding:4px 8px; border-radius:3px;
+  }
+  .ticket .tk-label{ font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:rgba(31,42,30,0.55); }
+  .ticket h3{ font-size:20px; margin-top:4px; }
+  .ticket .tk-id{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:rgba(31,42,30,0.6); margin-top:2px; }
+  .ticket .tk-body{ margin-top:12px; font-size:13.5px; line-height:1.7; }
+  .ticket .tk-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+
+  /* ---------- forms ---------- */
+  .formgrid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:640px){ .formgrid{ grid-template-columns:1fr; } }
+  .formgrid .full{ grid-column:1 / -1; }
+  .checkline{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .radiorow{ display:flex; gap:16px; flex-wrap:wrap; }
+  .radiopt{ display:flex; align-items:center; gap:6px; font-size:13.5px; }
+  .section-title{ margin-bottom:4px; }
+  .section-sub{ font-size:13.5px; color:rgba(31,42,30,0.65); margin-bottom:18px; }
+
+  /* ---------- modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(31,42,30,0.55); display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:50;
+  }
+  .modal-box{
+    background:var(--parchment); border-radius:6px; max-width:520px; width:100%; max-height:88vh; overflow-y:auto;
+    padding:22px; border:1px solid var(--line); animation:pop .15s ease;
+  }
+  @keyframes pop{ from{ transform:scale(.97); opacity:0; } to{ transform:scale(1); opacity:1; } }
+  .modal-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
+  .modal-head h2{ font-size:20px; }
+  .close-x{ background:none; border:none; font-size:20px; color:var(--ink); line-height:1; padding:2px 6px; }
+
+  /* ---------- toasts ---------- */
+  #toast-container{ position:fixed; bottom:18px; right:18px; display:flex; flex-direction:column; gap:8px; z-index:100; max-width:320px; }
+  .toast{
+    background:var(--ink); color:var(--ivory); padding:12px 16px; border-radius:5px; font-size:13.5px;
+    border-left:4px solid var(--ochre); animation:slidein .2s ease;
+  }
+  .toast.error{ border-left-color:var(--rust); }
+  @keyframes slidein{ from{ transform:translateX(20px); opacity:0; } to{ transform:translateX(0); opacity:1; } }
+
+  .loading-row{ text-align:center; padding:30px; color:rgba(31,42,30,0.6); font-size:13.5px; }
+
+  .listing-manage-card{ display:flex; flex-direction:column; gap:14px; }
+  .bk-item{ border:1px solid var(--line); border-radius:5px; padding:12px 14px; background:#fff; }
+  .bk-item + .bk-item{ margin-top:10px; }
+  .bk-top{ display:flex; justify-content:space-between; gap:8px; font-size:13.5px; font-weight:700; }
+  .bk-meta{ font-size:12.5px; color:rgba(31,42,30,0.65); margin-top:2px; }
+  .bk-notes{ font-size:13px; margin-top:8px; line-height:1.5; }
+  .bk-actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .status-pill{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; padding:3px 8px; border-radius:100px; }
+  .status-pill.pending{ background:var(--ochre); color:var(--ink); }
+  .status-pill.contacted{ background:var(--moss); color:var(--ivory); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button class="brand" data-nav="home" aria-label="Trapline home">
+      <span class="display">Trapline</span>
+      <span class="tagline">Local catchers · dispatched fast</span>
+    </button>
+    <nav class="navlinks">
+      <button data-nav="browse">Find a catcher</button>
+      <button data-nav="register">Become a catcher</button>
+      <button data-nav="manage">My listing</button>
+    </nav>
+  </header>
+  <main id="view-root"></main>
+  <footer class="sitefoot">
+    <strong>Trapline</strong> connects independent local catchers with people who need an animal removed. Listings are self-reported by catchers — always confirm price, method and safety details directly before booking.
+  </footer>
+</div>
+<div id="modal-root"></div>
+<div id="toast-container"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var ANIMAL_TYPES = [
+    { id:'snake',  label:'Snakes',          icon:'🐍' },
+    { id:'rat',    label:'Rats & rodents',  icon:'🐀' },
+    { id:'bees',   label:'Bees & wasps',    icon:'🐝' },
+    { id:'bats',   label:'Bats',            icon:'🦇' },
+    { id:'monkey', label:'Monkeys',         icon:'🐒' },
+    { id:'other',  label:'Other wildlife',  icon:'🐾' }
+  ];
+
+  var state = {
+    view: 'home',
+    catchers: [],
+    catchersLoaded: false,
+    loadingCatchers: false,
+    userLocation: null,
+    locatingUser: false,
+    filterAnimal: 'all',
+    areaQuery: '',
+    sortBy: 'distance',
+    manageResult: null,      // {catcher, bookings} | 'notfound' | null
+    manageLookupPhone: '',
+    registerLoc: null,       // {lat,lng} captured during registration
+    registerLocating: false
+  };
+
+  /* ---------------- helpers ---------------- */
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  function esc(s){
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+
+  function digitsOnly(s){ return (s || '').replace(/\D/g, ''); }
+
+  function animalMeta(id){
+    for (var i=0;i<ANIMAL_TYPES.length;i++){ if (ANIMAL_TYPES[i].id === id) return ANIMAL_TYPES[i]; }
+    return { id:id, label:id, icon:'🐾' };
+  }
+
+  function distanceKm(lat1, lng1, lat2, lng2){
+    var R = 6371;
+    var dLat = (lat2-lat1) * Math.PI/180;
+    var dLng = (lng2-lng1) * Math.PI/180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+            Math.sin(dLng/2)*Math.sin(dLng/2);
+    var c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R*c;
+  }
+
+  function getPosition(){
+    return new Promise(function(resolve, reject){
+      if (!navigator.geolocation){ reject(new Error('Geolocation not supported on this device')); return; }
+      navigator.geolocation.getCurrentPosition(
+        function(pos){ resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+        function(err){ reject(err); },
+        { enableHighAccuracy:true, timeout:10000 }
+      );
+    });
+  }
+
+  function showToast(msg, type){
+    var c = document.getElementById('toast-container');
+    var d = document.createElement('div');
+    d.className = 'toast' + (type === 'error' ? ' error' : '');
+    d.textContent = msg;
+    c.appendChild(d);
+    setTimeout(function(){ d.remove(); }, 4200);
+  }
+
+  /* ---------------- storage layer ---------------- */
+  async function getDirectory(){
+    try{
+      var res = await window.storage.get('catchers-directory', true);
+      return (res && res.value) ? JSON.parse(res.value) : [];
+    }catch(e){
+      return [];
+    }
+  }
+  async function saveDirectory(arr){
+    try{
+      var res = await window.storage.set('catchers-directory', JSON.stringify(arr), true);
+      return !!res;
+    }catch(e){
+      return false;
+    }
+  }
+  async function getBookings(catcherId){
+    try{
+      var res = await window.storage.get('bookings:' + catcherId, true);
+      return (res && res.value) ? JSON.parse(res.value) : [];
+    }catch(e){
+      return [];
+    }
+  }
+  async function saveBookings(catcherId, arr){
+    try{
+      var res = await window.storage.set('bookings:' + catcherId, JSON.stringify(arr), true);
+      return !!res;
+    }catch(e){
+      return false;
+    }
+  }
+
+  /* ---------------- data ops ---------------- */
+  async function loadCatchers(){
+    state.loadingCatchers = true;
+    render();
+    state.catchers = await getDirectory();
+    state.loadingCatchers = false;
+    state.catchersLoaded = true;
+    render();
+  }
+
+  function catcherDistance(c){
+    if (state.userLocation && typeof c.lat === 'number' && typeof c.lng === 'number'){
+      return distanceKm(state.userLocation.lat, state.userLocation.lng, c.lat, c.lng);
+    }
+    return null;
+  }
+
+  function filteredSortedCatchers(){
+    var list = state.catchers.slice();
+    if (state.filterAnimal !== 'all'){
+      list = list.filter(function(c){ return (c.animalTypes||[]).indexOf(state.filterAnimal) !== -1; });
+    }
+    if (state.areaQuery.trim()){
+      var q = state.areaQuery.trim().toLowerCase();
+      list = list.filter(function(c){ return (c.area||'').toLowerCase().indexOf(q) !== -1; });
+    }
+    list.forEach(function(c){ c._dist = catcherDistance(c); });
+    if (state.sortBy === 'distance'){
+      list.sort(function(a,b){
+        var da = (a._dist === null || a._dist === undefined) ? Infinity : a._dist;
+        var db = (b._dist === null || b._dist === undefined) ? Infinity : b._dist;
+        return da - db;
+      });
+    } else if (state.sortBy === 'availability'){
+      list.sort(function(a,b){
+        var av = (a.availability === 'now') ? 0 : 1;
+        var bv = (b.availability === 'now') ? 0 : 1;
+        if (av !== bv) return av - bv;
+        return (a.name||'').localeCompare(b.name||'');
+      });
+    }
+    return list;
+  }
+
+  /* ---------------- render dispatcher ---------------- */
+  function render(){
+    document.querySelectorAll('.navlinks button').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-nav') === state.view);
+    });
+    var root = document.getElementById('view-root');
+    if (state.view === 'home')      { renderHome(root); }
+    else if (state.view === 'browse'){ renderBrowse(root); bindBrowse(); }
+    else if (state.view === 'register'){ renderRegister(root); bindRegister(); }
+    else if (state.view === 'manage'){ renderManage(root); bindManage(); }
+  }
+
+  /* ---------------- HOME ---------------- */
+  function renderHome(root){
+    root.innerHTML =
+      '<section class="hero"><div class="hero-inner">' +
+        '<div class="eyebrow">Snake in the yard? Rats in the roof?</div>' +
+        '<h1>Get a local catcher on the way, not a lecture on the internet.</h1>' +
+        '<p class="lede">Trapline lists independent snake, rodent and pest catchers near you — with real phone numbers, WhatsApp, and prices they set themselves. No call centre in between.</p>' +
+        '<div class="hero-ctas">' +
+          '<button class="ticket-btn primary" data-nav="browse"><span class="tb-label">I need help now</span><span class="tb-title">Find a catcher →</span></button>' +
+          '<button class="ticket-btn" data-nav="register"><span class="tb-label">I catch animals for a living</span><span class="tb-title">Add my listing →</span></button>' +
+        '</div>' +
+        '<div class="howsteps">' +
+          '<div class="howstep"><div class="num">01</div><h3>Search your area</h3><p>Use your location or type your town — see who is nearby, right now.</p></div>' +
+          '<div class="howstep"><div class="num">02</div><h3>Contact them directly</h3><p>Call, message on WhatsApp, or send a booking request with your details.</p></div>' +
+          '<div class="howstep"><div class="num">03</div><h3>Agree it, then get it handled</h3><p>Confirm price and timing with the catcher yourself before they arrive.</p></div>' +
+        '</div>' +
+      '</div></section>';
+  }
+
+  /* ---------------- BROWSE ---------------- */
+  function renderBrowse(root){
+    var chips = ANIMAL_TYPES.map(function(a){
+      return '<button class="chip' + (state.filterAnimal === a.id ? ' active' : '') + '" data-filter-animal="' + a.id + '">' + a.icon + ' ' + esc(a.label) + '</button>';
+    }).join('');
+
+    var body = '';
+    if (!state.catchersLoaded || state.loadingCatchers){
+      body = '<div class="loading-row">Loading nearby catchers…</div>';
+    } else {
+      var list = filteredSortedCatchers();
+      body += '<div class="results-meta">' + list.length + ' catcher' + (list.length === 1 ? '' : 's') +
+              (state.userLocation ? ' · sorted by distance' : '') + '</div>';
+      if (state.catchers.length === 0){
+        body += '<div class="empty"><h3>No catchers registered yet</h3><p>Be the first to list your services on Trapline.</p>' +
+                '<button class="btn btn-ochre" data-nav="register" style="margin-top:12px;">Add my listing</button></div>';
+      } else if (list.length === 0){
+        body += '<div class="empty"><h3>Nothing matches yet</h3><p>Try a different area or clear the animal filter.</p></div>';
+      } else {
+        body += '<div class="cardgrid">' + list.map(renderCatcherCard).join('') + '</div>';
+      }
+    }
+
+    root.innerHTML =
+      '<div class="wrap">' +
+        '<h2 class="section-title">Find a catcher</h2>' +
+        '<p class="section-sub">Search by area or use your location to see who is closest.</p>' +
+        '<div class="panel">' +
+          '<div class="filterbar">' +
+            '<div class="field"><label for="areaInput">Area / town</label><input type="text" id="areaInput" placeholder="e.g. Maharagama" value="' + esc(state.areaQuery) + '" /></div>' +
+            '<div class="field" style="max-width:200px;"><label for="sortSelect">Sort by</label>' +
+              '<select id="sortSelect">' +
+                '<option value="distance"' + (state.sortBy === 'distance' ? ' selected' : '') + '>Nearest first</option>' +
+                '<option value="availability"' + (state.sortBy === 'availability' ? ' selected' : '') + '>Available now first</option>' +
+              '</select>' +
+            '</div>' +
+            '<button class="btn btn-ghost" id="useLocBtn"' + (state.locatingUser ? ' disabled' : '') + '>' +
+              (state.locatingUser ? 'Locating…' : (state.userLocation ? '📍 Location on' : '📍 Use my location')) +
+            '</button>' +
+          '</div>' +
+          '<div class="chiprow">' +
+            '<button class="chip' + (state.filterAnimal === 'all' ? ' active' : '') + '" data-filter-animal="all">All animals</button>' +
+            chips +
+          '</div>' +
+        '</div>' +
+        body +
+      '</div>';
+  }
+
+  function renderCatcherCard(c){
+    var meta = c.animalTypes.map(function(id){ var m = animalMeta(id); return '<span class="tag">' + m.icon + ' ' + esc(m.label) + '</span>'; }).join('');
+    var distHtml = (c._dist !== null && c._dist !== undefined) ? '<span class="distpill">' + c._dist.toFixed(1) + ' km away</span>' : '';
+    var waHtml = c.whatsapp ? '<button class="btn btn-ghost btn-sm" data-wa="' + esc(c.whatsapp) + '" data-wa-name="' + esc(c.name) + '">💬 WhatsApp</button>' : '';
+    return (
+      '<article class="ccard">' +
+        '<div class="ccard-head"><h3>' + esc(c.name) + '</h3>' +
+          '<span class="badge ' + (c.availability === 'now' ? 'now' : 'appt') + '">' + (c.availability === 'now' ? 'Available now' : 'By appointment') + '</span>' +
+        '</div>' +
+        '<div class="species-tags">' + meta + '</div>' +
+        '<div class="locrow"><span class="area">📍 ' + esc(c.area) + '</span>' + distHtml + '</div>' +
+        (c.priceNote ? '<div class="price">' + esc(c.priceNote) + '</div>' : '') +
+        (c.description ? '<div class="desc">' + esc(c.description) + '</div>' : '') +
+        '<div class="ccard-actions">' +
+          '<a class="btn btn-primary btn-sm" href="tel:' + esc(c.phone) + '">📞 Call</a>' +
+          waHtml +
+          '<button class="btn btn-ochre btn-sm" data-book="' + esc(c.id) + '">Book</button>' +
+        '</div>' +
+      '</article>'
+    );
+  }
+
+  function bindBrowse(){
+    var root = document.getElementById('view-root');
+
+    var areaInput = document.getElementById('areaInput');
+    if (areaInput){
+      areaInput.addEventListener('input', function(e){ state.areaQuery = e.target.value; renderResultsOnly(); });
+    }
+    var sortSelect = document.getElementById('sortSelect');
+    if (sortSelect){
+      sortSelect.addEventListener('change', function(e){ state.sortBy = e.target.value; render(); });
+    }
+    var useLocBtn = document.getElementById('useLocBtn');
+    if (useLocBtn){
+      useLocBtn.addEventListener('click', async function(){
+        state.locatingUser = true; render();
+        try{
+          state.userLocation = await getPosition();
+          showToast('Location found — showing nearest catchers first.');
+        }catch(e){
+          showToast("Couldn't get your location. You can still search by area name.", 'error');
+        }
+        state.locatingUser = false;
+        render();
+      });
+    }
+    root.querySelectorAll('[data-filter-animal]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.filterAnimal = btn.getAttribute('data-filter-animal');
+        render();
+      });
+    });
+    root.querySelectorAll('[data-book]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var c = state.catchers.find(function(x){ return x.id === btn.getAttribute('data-book'); });
+        if (c) openBookingModal(c);
+      });
+    });
+    root.querySelectorAll('[data-wa]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var num = digitsOnly(btn.getAttribute('data-wa'));
+        var name = btn.getAttribute('data-wa-name');
+        var text = "Hi " + name + ", I found your listing on Trapline and need help with an animal removal.";
+        window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(text), '_blank');
+      });
+    });
+  }
+
+  function renderResultsOnly(){
+    // lightweight re-render of just the list portion to keep input focus while typing
+    var list = filteredSortedCatchers();
+    var metaEl = document.querySelector('.results-meta');
+    if (metaEl){
+      metaEl.textContent = list.length + ' catcher' + (list.length === 1 ? '' : 's') + (state.userLocation ? ' · sorted by distance' : '');
+    }
+    var gridEl = document.querySelector('.cardgrid');
+    var wrap = document.querySelector('.wrap');
+    if (list.length === 0 && state.catchers.length > 0){
+      if (gridEl) gridEl.outerHTML = '<div class="empty"><h3>Nothing matches yet</h3><p>Try a different area or clear the animal filter.</p></div>';
+      else {
+        var existingEmpty = document.querySelector('.empty');
+        if (!existingEmpty && wrap) wrap.insertAdjacentHTML('beforeend', '<div class="empty"><h3>Nothing matches yet</h3><p>Try a different area or clear the animal filter.</p></div>');
+      }
+    } else if (gridEl){
+      gridEl.innerHTML = list.map(renderCatcherCard).join('');
+      bindCardButtons(gridEl);
+    } else {
+      var emptyEl = document.querySelector('.empty');
+      if (emptyEl && wrap) emptyEl.outerHTML = '<div class="cardgrid">' + list.map(renderCatcherCard).join('') + '</div>';
+      bindCardButtons(document.querySelector('.cardgrid'));
+    }
+  }
+
+  function bindCardButtons(scopeEl){
+    if (!scopeEl) return;
+    scopeEl.querySelectorAll('[data-book]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var c = state.catchers.find(function(x){ return x.id === btn.getAttribute('data-book'); });
+        if (c) openBookingModal(c);
+      });
+    });
+    scopeEl.querySelectorAll('[data-wa]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var num = digitsOnly(btn.getAttribute('data-wa'));
+        var name = btn.getAttribute('data-wa-name');
+        var text = "Hi " + name + ", I found your listing on Trapline and need help with an animal removal.";
+        window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(text), '_blank');
+      });
+    });
+  }
+
+  /* ---------------- REGISTER ---------------- */
+  function renderRegister(root){
+    var chips = ANIMAL_TYPES.map(function(a){
+      return '<button type="button" class="chip" data-reg-animal="' + a.id + '">' + a.icon + ' ' + esc(a.label) + '</button>';
+    }).join('');
+
+    root.innerHTML =
+      '<div class="wrap">' +
+        '<h2 class="section-title">Add my listing</h2>' +
+        '<p class="section-sub">Takes about a minute. Your phone number is how you\'ll manage this listing later, so keep it accurate.</p>' +
+        '<form class="panel" id="registerForm">' +
+          '<div class="formgrid">' +
+            '<div class="field"><label for="rName">Full name</label><input type="text" id="rName" required placeholder="e.g. Sunil Perera" /></div>' +
+            '<div class="field"><label for="rPhone">Phone number</label><input type="tel" id="rPhone" required placeholder="e.g. 077 123 4567" /></div>' +
+            '<div class="field"><label for="rWhatsapp">WhatsApp number (optional)</label><input type="tel" id="rWhatsapp" placeholder="e.g. 94771234567 (country code, no leading 0)" /></div>' +
+            '<div class="field" style="justify-content:flex-end;"><label class="checkline"><input type="checkbox" id="rSameWA" /> Same as phone number</label></div>' +
+            '<div class="field full"><label for="rArea">Area / town</label><input type="text" id="rArea" required placeholder="e.g. Maharagama, Western Province" />' +
+              '<span class="hint" id="locHint">Optional: add your exact location so nearby customers can find you by distance.</span></div>' +
+            '<div class="field full"><button type="button" class="btn btn-ghost" id="regUseLocBtn" style="width:fit-content;">' + (state.registerLocating ? 'Locating…' : (state.registerLoc ? '📍 Location captured' : '📍 Capture my current location')) + '</button></div>' +
+            '<div class="field full"><label>Animals you catch</label><div class="chiprow" id="regAnimalChips">' + chips + '</div></div>' +
+            '<div class="field full"><label for="rPrice">Pricing note</label><input type="text" id="rPrice" placeholder="e.g. Rs. 1500–3000 depending on situation" /></div>' +
+            '<div class="field full"><label for="rDesc">Experience / description (optional)</label><textarea id="rDesc" placeholder="e.g. 8 years catching snakes safely, cobra and viper handling."></textarea></div>' +
+            '<div class="field full"><label>Availability</label><div class="radiorow">' +
+              '<label class="radiopt"><input type="radio" name="rAvail" value="now" checked /> Available now (emergency callouts)</label>' +
+              '<label class="radiopt"><input type="radio" name="rAvail" value="appointment" /> By appointment only</label>' +
+            '</div></div>' +
+          '</div>' +
+          '<button type="submit" class="btn btn-primary" style="margin-top:16px;">Add my listing</button>' +
+        '</form>' +
+        '<div id="registerTicketSlot"></div>' +
+      '</div>';
+  }
+
+  function bindRegister(){
+    var selectedAnimals = {};
+    var root = document.getElementById('view-root');
+
+    root.querySelectorAll('[data-reg-animal]').forEach(function(chip){
+      chip.addEventListener('click', function(){
+        var id = chip.getAttribute('data-reg-animal');
+        selectedAnimals[id] = !selectedAnimals[id];
+        chip.classList.toggle('active', !!selectedAnimals[id]);
+      });
+    });
+
+    var sameWA = document.getElementById('rSameWA');
+    var waInput = document.getElementById('rWhatsapp');
+    sameWA.addEventListener('change', function(){
+      if (sameWA.checked){ waInput.value = document.getElementById('rPhone').value; waInput.disabled = true; }
+      else { waInput.disabled = false; }
+    });
+
+    document.getElementById('regUseLocBtn').addEventListener('click', async function(){
+      state.registerLocating = true; render();
+      try{
+        state.registerLoc = await getPosition();
+        showToast('Location captured — this helps nearby customers find you.');
+      }catch(e){
+        showToast("Couldn't capture location. You can still register with just your area name.", 'error');
+      }
+      state.registerLocating = false;
+      render();
+      // re-apply chip selections after re-render since form was rebuilt
+      Object.keys(selectedAnimals).forEach(function(id){
+        if (selectedAnimals[id]){
+          var chip = document.querySelector('[data-reg-animal="' + id + '"]');
+          if (chip) chip.classList.add('active');
+        }
+      });
+      rebindRegisterAnimalChips(selectedAnimals);
+    });
+
+    document.getElementById('registerForm').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var name = document.getElementById('rName').value.trim();
+      var phone = document.getElementById('rPhone').value.trim();
+      var whatsapp = document.getElementById('rWhatsapp').value.trim();
+      var area = document.getElementById('rArea').value.trim();
+      var priceNote = document.getElementById('rPrice').value.trim();
+      var description = document.getElementById('rDesc').value.trim();
+      var availability = document.querySelector('input[name="rAvail"]:checked').value;
+      var animalTypes = Object.keys(selectedAnimals).filter(function(k){ return selectedAnimals[k]; });
+
+      if (!name || !phone || !area){
+        showToast('Please fill in your name, phone number and area.', 'error');
+        return;
+      }
+      if (animalTypes.length === 0){
+        showToast('Pick at least one animal type you catch.', 'error');
+        return;
+      }
+
+      var submitBtn = e.target.querySelector('button[type=submit]');
+      submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
+
+      var catcher = {
+        id: uid(),
+        name: name,
+        phone: phone,
+        whatsapp: whatsapp || '',
+        area: area,
+        lat: state.registerLoc ? state.registerLoc.lat : null,
+        lng: state.registerLoc ? state.registerLoc.lng : null,
+        animalTypes: animalTypes,
+        priceNote: priceNote,
+        description: description,
+        availability: availability,
+        createdAt: Date.now()
+      };
+
+      var dir = await getDirectory();
+      dir.push(catcher);
+      var ok = await saveDirectory(dir);
+
+      submitBtn.disabled = false; submitBtn.textContent = 'Add my listing';
+
+      if (!ok){
+        showToast('Something went wrong saving your listing. Please try again.', 'error');
+        return;
+      }
+
+      state.catchers = dir;
+      state.catchersLoaded = true;
+      showToast('Listing added — customers near ' + area + ' can now find you.');
+
+      document.getElementById('registerTicketSlot').innerHTML =
+        '<div class="ticket">' +
+          '<span class="stamp">Listed</span>' +
+          '<div class="tk-label">Trapline listing</div>' +
+          '<h3>' + esc(name) + '</h3>' +
+          '<div class="tk-id mono">ID ' + esc(catcher.id) + '</div>' +
+          '<div class="tk-body">Your listing is now visible to anyone browsing ' + esc(area) + '. Save your phone number — you\'ll need it under <strong>My listing</strong> to edit or take it down.</div>' +
+          '<div class="tk-actions"><button class="btn btn-ochre btn-sm" data-nav="browse">See it in Find a catcher</button></div>' +
+        '</div>';
+      document.querySelectorAll('#registerTicketSlot [data-nav]').forEach(function(b){
+        b.addEventListener('click', function(){ navigate('browse'); });
+      });
+      e.target.reset();
+    });
+  }
+
+  function rebindRegisterAnimalChips(selectedAnimals){
+    document.querySelectorAll('[data-reg-animal]').forEach(function(chip){
+      chip.addEventListener('click', function(){
+        var id = chip.getAttribute('data-reg-animal');
+        selectedAnimals[id] = !selectedAnimals[id];
+        chip.classList.toggle('active', !!selectedAnimals[id]);
+      });
+    });
+  }
+
+  /* ---------------- MANAGE ---------------- */
+  function renderManage(root){
+    var resultHtml = '';
+    if (state.manageResult === 'notfound'){
+      resultHtml = '<div class="empty"><h3>No listing found</h3><p>We couldn\'t find a listing registered with that phone number.</p>' +
+        '<button class="btn btn-ochre" data-nav="register" style="margin-top:12px;">Register as a catcher</button></div>';
+    } else if (state.manageResult){
+      var c = state.manageResult.catcher;
+      var bookings = state.manageResult.bookings;
+      var meta = c.animalTypes.map(function(id){ var m = animalMeta(id); return '<span class="tag">' + m.icon + ' ' + esc(m.label) + '</span>'; }).join('');
+      var bkHtml = bookings.length === 0
+        ? '<p class="section-sub">No booking requests yet.</p>'
+        : bookings.map(function(b){
+            return (
+              '<div class="bk-item">' +
+                '<div class="bk-top"><span>' + esc(b.customerName) + '</span><span class="status-pill ' + (b.status === 'contacted' ? 'contacted' : 'pending') + '">' + (b.status === 'contacted' ? 'Contacted' : 'Pending') + '</span></div>' +
+                '<div class="bk-meta">' + esc(animalMeta(b.animalType).label) + ' · ' + esc(b.area) + (b.preferredTime ? ' · ' + esc(b.preferredTime) : '') + '</div>' +
+                (b.notes ? '<div class="bk-notes">' + esc(b.notes) + '</div>' : '') +
+                '<div class="bk-actions">' +
+                  '<a class="btn btn-primary btn-sm" href="tel:' + esc(b.customerPhone) + '">📞 Call back</a>' +
+                  (b.status !== 'contacted' ? '<button class="btn btn-ghost btn-sm" data-mark-contacted="' + esc(b.id) + '">Mark contacted</button>' : '') +
+                '</div>' +
+              '</div>'
+            );
+          }).join('');
+
+      resultHtml =
+        '<div class="panel listing-manage-card">' +
+          '<div class="ccard-head"><h3>' + esc(c.name) + '</h3><span class="badge ' + (c.availability === 'now' ? 'now' : 'appt') + '">' + (c.availability === 'now' ? 'Available now' : 'By appointment') + '</span></div>' +
+          '<div class="species-tags">' + meta + '</div>' +
+          '<div class="locrow"><span class="area">📍 ' + esc(c.area) + '</span></div>' +
+          (c.priceNote ? '<div class="price">' + esc(c.priceNote) + '</div>' : '') +
+          '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
+            '<button class="btn btn-ghost btn-sm" id="toggleAvailBtn">Switch to ' + (c.availability === 'now' ? 'By appointment' : 'Available now') + '</button>' +
+            '<button class="btn btn-ghost btn-sm" id="deleteListingBtn">Delete my listing</button>' +
+          '</div>' +
+        '</div>' +
+        '<h2 class="section-title" style="margin-top:26px;">Booking requests</h2>' +
+        '<p class="section-sub">Sent to you through Trapline. Call back to confirm.</p>' +
+        bkHtml;
+    }
+
+    root.innerHTML =
+      '<div class="wrap">' +
+        '<h2 class="section-title">My listing</h2>' +
+        '<p class="section-sub">Enter the phone number you registered with to manage your listing and see booking requests.</p>' +
+        '<form class="panel" id="manageForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">' +
+          '<div class="field" style="flex:1 1 220px;"><label for="mPhone">Phone number</label><input type="tel" id="mPhone" required placeholder="e.g. 077 123 4567" value="' + esc(state.manageLookupPhone) + '" /></div>' +
+          '<button type="submit" class="btn btn-primary">Find my listing</button>' +
+        '</form>' +
+        '<div style="margin-top:20px;">' + resultHtml + '</div>' +
+      '</div>';
+  }
+
+  function bindManage(){
+    var root = document.getElementById('view-root');
+    document.getElementById('manageForm').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var phone = document.getElementById('mPhone').value.trim();
+      state.manageLookupPhone = phone;
+      if (!phone){ return; }
+      var dir = state.catchersLoaded ? state.catchers : await getDirectory();
+      state.catchers = dir; state.catchersLoaded = true;
+      var norm = digitsOnly(phone);
+      var found = dir.find(function(c){ return digitsOnly(c.phone) === norm; });
+      if (!found){
+        state.manageResult = 'notfound';
+        render();
+        return;
+      }
+      var bookings = await getBookings(found.id);
+      state.manageResult = { catcher: found, bookings: bookings };
+      render();
+    });
+
+    var toggleBtn = document.getElementById('toggleAvailBtn');
+    if (toggleBtn){
+      toggleBtn.addEventListener('click', async function(){
+        var c = state.manageResult.catcher;
+        c.availability = c.availability === 'now' ? 'appointment' : 'now';
+        var dir = await getDirectory();
+        var idx = dir.findIndex(function(x){ return x.id === c.id; });
+        if (idx !== -1){ dir[idx] = c; await saveDirectory(dir); state.catchers = dir; }
+        showToast('Availability updated.');
+        render();
+      });
+    }
+
+    var deleteBtn = document.getElementById('deleteListingBtn');
+    if (deleteBtn){
+      deleteBtn.addEventListener('click', async function(){
+        if (!window.confirm('Delete your listing from Trapline? This cannot be undone.')) return;
+        var c = state.manageResult.catcher;
+        var dir = await getDirectory();
+        dir = dir.filter(function(x){ return x.id !== c.id; });
+        var ok = await saveDirectory(dir);
+        if (ok){
+          state.catchers = dir;
+          state.manageResult = null;
+          showToast('Listing deleted.');
+          render();
+        } else {
+          showToast('Could not delete listing. Try again.', 'error');
+        }
+      });
+    }
+
+    root.querySelectorAll('[data-mark-contacted]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        var bId = btn.getAttribute('data-mark-contacted');
+        var c = state.manageResult.catcher;
+        var bookings = state.manageResult.bookings;
+        var idx = bookings.findIndex(function(b){ return b.id === bId; });
+        if (idx !== -1){
+          bookings[idx].status = 'contacted';
+          await saveBookings(c.id, bookings);
+          render();
+        }
+      });
+    });
+  }
+
+  /* ---------------- booking modal ---------------- */
+  function openBookingModal(catcher){
+    var animalOptions = catcher.animalTypes.map(function(id){
+      var m = animalMeta(id);
+      return '<option value="' + id + '">' + m.icon + ' ' + esc(m.label) + '</option>';
+    }).join('');
+
+    var root = document.getElementById('modal-root');
+    root.innerHTML =
+      '<div class="modal-overlay" id="modalOverlay">' +
+        '<div class="modal-box">' +
+          '<div class="modal-head"><h2>Book ' + esc(catcher.name) + '</h2><button class="close-x" id="modalClose">✕</button></div>' +
+          '<form id="bookingForm">' +
+            '<div class="formgrid">' +
+              '<div class="field full"><label for="bName">Your name</label><input type="text" id="bName" required /></div>' +
+              '<div class="field"><label for="bPhone">Your phone</label><input type="tel" id="bPhone" required /></div>' +
+              '<div class="field"><label for="bAnimal">Animal</label><select id="bAnimal">' + animalOptions + '</select></div>' +
+              '<div class="field full"><label for="bArea">Your address / area</label><input type="text" id="bArea" required /></div>' +
+              '<div class="field full"><label for="bTime">Preferred time (optional)</label><input type="text" id="bTime" placeholder="e.g. Today evening, or ASAP" /></div>' +
+              '<div class="field full"><label for="bNotes">Describe the situation (optional)</label><textarea id="bNotes" placeholder="e.g. Cobra spotted near the water tank"></textarea></div>' +
+            '</div>' +
+            '<button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Send booking request</button>' +
+          '</form>' +
+          '<div id="bookingTicketSlot"></div>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    document.getElementById('modalOverlay').addEventListener('click', function(e){ if (e.target.id === 'modalOverlay') closeModal(); });
+
+    document.getElementById('bookingForm').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var customerName = document.getElementById('bName').value.trim();
+      var customerPhone = document.getElementById('bPhone').value.trim();
+      var animalType = document.getElementById('bAnimal').value;
+      var area = document.getElementById('bArea').value.trim();
+      var preferredTime = document.getElementById('bTime').value.trim();
+      var notes = document.getElementById('bNotes').value.trim();
+
+      if (!customerName || !customerPhone || !area){
+        showToast('Please fill in your name, phone and area.', 'error');
+        return;
+      }
+
+      var submitBtn = e.target.querySelector('button[type=submit]');
+      submitBtn.disabled = true; submitBtn.textContent = 'Sending…';
+
+      var booking = {
+        id: uid(), catcherId: catcher.id, customerName: customerName, customerPhone: customerPhone,
+        animalType: animalType, area: area, preferredTime: preferredTime, notes: notes,
+        createdAt: Date.now(), status: 'pending'
+      };
+      var bookings = await getBookings(catcher.id);
+      bookings.unshift(booking);
+      var ok = await saveBookings(catcher.id, bookings);
+
+      submitBtn.disabled = false; submitBtn.textContent = 'Send booking request';
+
+      if (!ok){
+        showToast('Could not send the request. Please try calling instead.', 'error');
+        return;
+      }
+
+      var waBtn = '';
+      if (catcher.whatsapp){
+        var text = "Hi " + catcher.name + ", I just sent a booking request on Trapline. " +
+                    animalMeta(animalType).label + " at " + area + (preferredTime ? (", preferred time: " + preferredTime) : "") + ".";
+        waBtn = '<a class="btn btn-ochre btn-sm" target="_blank" href="https://wa.me/' + digitsOnly(catcher.whatsapp) + '?text=' + encodeURIComponent(text) + '">💬 Also message on WhatsApp</a>';
+      }
+
+      document.getElementById('bookingForm').style.display = 'none';
+      document.getElementById('bookingTicketSlot').innerHTML =
+        '<div class="ticket">' +
+          '<span class="stamp">Sent</span>' +
+          '<div class="tk-label">Booking request</div>' +
+          '<h3>' + esc(catcher.name) + '</h3>' +
+          '<div class="tk-id mono">REF ' + esc(booking.id) + '</div>' +
+          '<div class="tk-body">Your request has been saved to their listing. For anything urgent, calling or messaging directly is fastest.</div>' +
+          '<div class="tk-actions">' +
+            '<a class="btn btn-primary btn-sm" href="tel:' + esc(catcher.phone) + '">📞 Call now</a>' +
+            waBtn +
+            '<button class="btn btn-ghost btn-sm" id="closeTicketBtn">Close</button>' +
+          '</div>' +
+        '</div>';
+      document.getElementById('closeTicketBtn').addEventListener('click', closeModal);
+    });
+  }
+
+  function closeModal(){
+    document.getElementById('modal-root').innerHTML = '';
+  }
+
+  /* ---------------- navigation ---------------- */
+  function navigate(view){
+    state.view = view;
+    if (view === 'browse' && !state.catchersLoaded && !state.loadingCatchers){
+      loadCatchers();
+    } else {
+      render();
+    }
+  }
+
+  document.querySelectorAll('[data-nav]').forEach(function(el){
+    el.addEventListener('click', function(){ navigate(el.getAttribute('data-nav')); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
